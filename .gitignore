@@ -1,0 +1,17 @@
+# ---- Node / 构建 ----
+node_modules/
+dist/
+*.local
+
+# ---- 日志 ----
+*.log
+
+# ---- 环境与密钥 ----
+.env
+.env.*
+
+# ---- IDE ----
+.idea/
+*.iml
+.vscode/
+.DS_Store
