@@ -20,10 +20,11 @@
 
     <div class="content-grid">
       <div class="main-col">
-        <!-- 猜你喜欢：REC-01 上线前以热门兜底（PRD REC-02 冷启动口径） -->
+        <!-- 猜你喜欢：REC-01 个性化推荐（行为加权 5/3/1 + 标签/分类匹配），
+             无行为的新用户与游客由后端回退热门商品（REC-02 冷启动） -->
         <div class="section-head">
           <h2 class="section-title">猜你喜欢</h2>
-          <span class="section-note">个性化推荐上线前展示热门商品</span>
+          <span class="section-note">{{ userStore.isLoggedIn ? '根据你的浏览/收藏/成交推荐' : '登录后为你个性化推荐' }}</span>
         </div>
         <div v-if="hotLoading" class="card-grid">
           <el-skeleton v-for="i in 8" :key="i" :rows="3" animated class="skeleton-card" />
@@ -84,10 +85,13 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { pageGoods, listCategories } from '@/api/goods'
+import { recommendHome, recommendHot } from '@/api/recommend'
+import { useUserStore } from '@/stores/user'
 import GoodsCard from '@/components/GoodsCard.vue'
 import EmptyBlock from '@/components/EmptyBlock.vue'
 
 const router = useRouter()
+const userStore = useUserStore()
 
 const categories = ref([])
 const hotGoods = ref([])
@@ -100,12 +104,15 @@ const hotList = ref([])
 
 onMounted(async () => {
   listCategories().then((res) => { categories.value = res.data || [] }).catch(() => {})
-  pageGoods({ pageNum: 1, pageSize: 8, sort: 'hot' })
-    .then((res) => {
-      hotGoods.value = res.data.list || []
-      hotList.value = (res.data.list || []).slice(0, 10)
-    })
+  // 猜你喜欢（REC-01）：接口直读后端定时任务写入 Redis 的推荐缓存；游客/新用户由后端热门兜底
+  recommendHome(8)
+    .then((res) => { hotGoods.value = res.data || [] })
+    .catch(() => {})
     .finally(() => { hotLoading.value = false })
+  // 热度榜 Top10（REC-02）：heat_score = 浏览×1 + 收藏×3 + 想要×5
+  recommendHot(10)
+    .then((res) => { hotList.value = res.data || [] })
+    .catch(() => {})
   loadLatest()
 })
 

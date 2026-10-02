@@ -12,8 +12,14 @@
       <PriceText :value="goods.price" />
       <div class="meta-row">
         <el-tag size="small" type="info" effect="plain">{{ conditionText }}</el-tag>
-        <el-tag v-for="tag in (goods.tags || []).slice(0, 3)" :key="tag.id" size="small" effect="light">
-          {{ tag.name }}
+        <!-- 标签兼容两种后端结构：GoodsCardVO 返回标签名字符串，详情/发布返回 {id,name} -->
+        <el-tag
+          v-for="tag in (goods.tags || []).slice(0, 3)"
+          :key="tagName(tag)"
+          size="small"
+          effect="light"
+        >
+          {{ tagName(tag) }}
         </el-tag>
         <span v-if="(goods.tags || []).length > 3" class="more-tag">+{{ goods.tags.length - 3 }}</span>
       </div>
@@ -43,6 +49,8 @@ const STATUS = { IN_TRANSACTION: '交易中', SOLD: '已售出', OFF_SALE: '已�
 
 const conditionText = computed(() => CONDITION[props.goods.conditionLevel] || '—')
 const statusText = computed(() => STATUS[props.goods.status] || '')
+/** 标签名：兼容字符串（列表接口）与 {id,name}（详情接口）两种结构 */
+const tagName = (tag) => (typeof tag === 'string' ? tag : tag?.name || '')
 const shortTime = computed(() => {
   const t = props.goods.createdAt
   return t ? String(t).slice(5, 10) : ''

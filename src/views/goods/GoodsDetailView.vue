@@ -145,8 +145,10 @@ async function load() {
   try {
     const res = await getGoods(id)
     detail.value = res.data
-    // 相似推荐：同分类在售商品，排除自身，取 6 个（前端设计文档 §6.1）
-    if (detail.value?.categoryId) {
+    // 相似推荐（REC-03）：后端按"同分类 + 共享标签"离线计算并缓存，随详情一并返回；
+    // 若推荐结果为空（如无标签且同类商品少），回退为同分类热门商品
+    similar.value = (detail.value?.similarGoods || []).filter((g) => g.id !== detail.value.id).slice(0, 6)
+    if (!similar.value.length && detail.value?.categoryId) {
       const sim = await pageGoods({ categoryId: detail.value.categoryId, pageNum: 1, pageSize: 7, sort: 'hot' })
       similar.value = (sim.data.list || []).filter((g) => g.id !== detail.value.id).slice(0, 6)
     }

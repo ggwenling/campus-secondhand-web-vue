@@ -1,8 +1,297 @@
 <template>
-  <div class="page">
-    <h2 class="page-title">交换广场</h2>
-    <el-card shadow="never" class="placeholder-card">
-      <el-empty description="交换帖列表：分页 + 筛选（SWP-03）" />
+  <div class="page swap-square">
+    <div class="page-head">
+      <div>
+        <h2 class="page-title">交换广场</h2>
+        <p class="page-sub">以物易物，把闲置换成你真正需要的东西</p>
+      </div>
+      <el-radio-group v-model="query.status" @change="reload">
+        <el-radio-button value="OPEN">交换中</el-radio-button>
+        <el-radio-button value="DEALT">已成交</el-radio-button>
+        <el-radio-button value="CLOSED">已关闭</el-radio-button>
+      </el-radio-group>
+    </div>
+
+    <el-card shadow="never" class="filter-card">
+      <div class="filter-row">
+        <el-cascader
+          v-model="query.categoryId"
+          :options="categories"
+          :props="{ value: 'id', label: 'name', emitPath: false, checkStrictly: true }"
+          placeholder="物品分类"
+          clearable
+          style="width: 200px"
+          @change="reload"
+        />
+        <el-input
+          v-model="query.q"
+          placeholder="搜索标题或物品描述"
+          clearable
+          style="width: 280px"
+          @keyup.enter="reload"
+          @clear="reload"
+        >
+          <template #prefix><el-icon><Search /></el-icon></template>
+        </el-input>
+        <el-button type="primary" @click="reload">筛选</el-button>
+      </div>
     </el-card>
+
+    <div v-if="loading" class="post-grid">
+      <el-skeleton v-for="i in 4" :key="i" :rows="5" animated class="skeleton-card" />
+    </div>
+    <template v-else>
+      <div v-if="posts.length" class="post-grid">
+        <el-card
+          v-for="post in posts"
+          :key="post.id"
+          shadow="never"
+          class="post-card"
+          @click="router.push(`/swap/${post.id}`)"
+        >
+          <div class="post-top">
+            <h3 class="post-title">{{ post.title }}</h3>
+            <el-tag v-if="post.status !== 'OPEN'" size="small" type="info">{{ statusText(post.status) }}</el-tag>
+          </div>
+
+          <!-- 物品对照（我的物品 ↔ 想要的物品） -->
+          <div class="item-swap">
+            <div class="item-box">
+              <span class="item-label"><el-icon><Box /></el-icon> 我拿出</span>
+              <p class="item-text">{{ post.myItemDesc }}</p>
+            </div>
+            <div class="swap-arrow"><el-icon :size="20"><Switch /></el-icon></div>
+            <div class="item-box want">
+              <span class="item-label"><el-icon><Star /></el-icon> 我想换</span>
+              <p class="item-text">{{ post.wantItemDesc }}</p>
+            </div>
+          </div>
+
+          <div class="post-foot">
+            <div class="publisher">
+              <el-avatar :size="26" :src="post.publisher?.avatar || undefined">
+                {{ (post.publisher?.nickname || '同')[0] }}
+              </el-avatar>
+              <span class="nickname">{{ post.publisher?.nickname || '校园用户' }}</span>
+            </div>
+            <div class="foot-right">
+              <el-tag v-if="post.allowDiff === 1" size="small" type="warning" effect="light">
+                可补差价{{ hasDiffAmount(post) ? ` ¥${Number(post.diffAmount).toFixed(2)}` : '' }}
+              </el-tag>
+              <el-tag v-else size="small" type="info" effect="plain">不补差价</el-tag>
+              <span v-if="post.myRequestStatus === 0" class="my-state">已发起 · 待处理</span>
+              <span v-else-if="post.myRequestStatus === 1" class="my-state success">已达成交换</span>
+              <span class="req-count"><el-icon><ChatLineSquare /></el-icon>{{ post.pendingRequestCount ?? 0 }}</span>
+            </div>
+          </div>
+        </el-card>
+      </div>
+      <EmptyBlock
+        v-else
+        description="还没有交换帖，发布一条试试"
+        action-text="发布交换"
+        @action="goPublish"
+      />
+    </template>
+
+    <div v-if="total > query.pageSize" class="pager-row">
+      <el-pagination
+        v-model:current-page="query.pageNum"
+        layout="total, prev, pager, next"
+        :page-size="query.pageSize"
+        :total="total"
+        @current-change="load"
+      />
+    </div>
+
+    <div class="fab-wrap">
+      <el-button type="primary" size="large" round class="fab" @click="goPublish">
+        <el-icon><Plus /></el-icon>&nbsp;发布交换
+      </el-button>
+    </div>
   </div>
 </template>
+
+<script setup>
+// 交换广场（PRD SWP-02 / 前端设计文档 §6.1）：双列卡 + 我的物品/想要物品对照 + 可补差价 tag
+import { onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { pageSwapPosts } from '@/api/swap'
+import { listCategories } from '@/api/goods'
+import EmptyBlock from '@/components/EmptyBlock.vue'
+
+const router = useRouter()
+
+const posts = ref([])
+const total = ref(0)
+const loading = ref(true)
+const categories = ref([])
+const query = reactive({ pageNum: 1, pageSize: 10, status: 'OPEN', categoryId: null, q: '' })
+
+const STATUS = { OPEN: '交换中', DEALT: '已成交', CLOSED: '已关闭' }
+const statusText = (s) => STATUS[s] || s
+const hasDiffAmount = (post) => post.diffAmount !== null && post.diffAmount !== undefined && Number(post.diffAmount) > 0
+
+onMounted(() => {
+  listCategories().then((res) => { categories.value = res.data || [] }).catch(() => {})
+  load()
+})
+
+function reload() {
+  query.pageNum = 1
+  load()
+}
+
+async function load() {
+  loading.value = true
+  try {
+    const res = await pageSwapPosts({ ...query, categoryId: query.categoryId || undefined })
+    posts.value = res.data.list || []
+    total.value = res.data.total || 0
+  } finally {
+    loading.value = false
+  }
+}
+
+function goPublish() {
+  router.push('/swap/publish')
+}
+</script>
+
+<style scoped>
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.page-sub {
+  color: #909399;
+  font-size: 13px;
+  margin: 4px 0 0;
+}
+.filter-card {
+  border-radius: var(--radius-card);
+  margin-bottom: 20px;
+}
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.post-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+.skeleton-card {
+  border-radius: var(--radius-card);
+  background: var(--color-card-bg);
+  padding: 16px;
+}
+.post-card {
+  border-radius: var(--radius-card);
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.post-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-card-hover);
+}
+.post-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.post-title {
+  font-size: 17px;
+  margin: 0 0 12px;
+  line-height: 1.4;
+}
+.item-swap {
+  display: grid;
+  grid-template-columns: 1fr 32px 1fr;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.item-box {
+  background: var(--color-page-bg);
+  border-radius: var(--radius-image);
+  padding: 10px 12px;
+  min-height: 84px;
+}
+.item-box.want {
+  background: var(--color-primary-bg);
+}
+.item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #909399;
+}
+.item-text {
+  font-size: 13px;
+  color: #303133;
+  line-height: 1.5;
+  margin: 6px 0 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.swap-arrow {
+  display: flex;
+  justify-content: center;
+  color: var(--color-primary);
+}
+.post-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 12px;
+}
+.publisher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #606266;
+}
+.foot-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #909399;
+}
+.my-state {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+.req-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.pager-row {
+  display: flex;
+  justify-content: center;
+  margin: 24px 0;
+}
+.fab-wrap {
+  position: fixed;
+  right: max(32px, calc((100vw - 1200px) / 2 + 32px));
+  bottom: 48px;
+  z-index: 10;
+}
+.fab {
+  box-shadow: 0 8px 24px rgba(0, 181, 120, 0.32);
+}
+</style>
