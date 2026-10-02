@@ -43,16 +43,17 @@
           </div>
 
           <div class="action-row">
-            <el-tooltip content="站内聊天随 M4 上线" placement="top">
-              <el-button type="primary" size="large" disabled>
-                <el-icon><ChatDotRound /></el-icon>&nbsp;聊一聊
-              </el-button>
-            </el-tooltip>
-            <el-tooltip content="想要并下单随 M3 交易闭环上线" placement="top">
+            <el-button type="primary" size="large" @click="handleChat">
+              <el-icon><ChatDotRound /></el-icon>&nbsp;聊一聊
+            </el-button>
+            <el-tooltip v-if="detail.status !== 'ON_SALE'" :content="statusTip" placement="top">
               <el-button type="warning" size="large" disabled>
-                <el-icon><Star /></el-icon>&nbsp;想要
+                <el-icon><Star /></el-icon>&nbsp;{{ wantLabel }}
               </el-button>
             </el-tooltip>
+            <el-button v-else type="warning" size="large" @click="handleWant">
+              <el-icon><Star /></el-icon>&nbsp;想要
+            </el-button>
             <el-button size="large" :type="detail.favorited ? 'danger' : 'default'" plain @click="toggleFavorite">
               <el-icon><CollectionTag /></el-icon>&nbsp;{{ detail.favorited ? '已收藏' : '收藏' }}
             </el-button>
@@ -103,6 +104,8 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getGoods, pageGoods, addFavorite, removeFavorite, offSaleGoods, onSaleGoods, restoreGoods, deleteGoods } from '@/api/goods'
+import { createOrder } from '@/api/order'
+import { sendChatMessage } from '@/api/message'
 import { useUserStore } from '@/stores/user'
 import PriceText from '@/components/PriceText.vue'
 import UserCard from '@/components/UserCard.vue'
@@ -120,6 +123,15 @@ const similar = ref([])
 const loading = ref(true)
 
 const conditionText = computed(() => CONDITION[detail.value?.conditionLevel] || '—')
+
+/** 非在售时的"想要"按钮提示与文案（PRD §5.3 商品状态机） */
+const statusTip = computed(() => ({
+  IN_TRANSACTION: '该商品已有买家下单，交易进行中',
+  SOLD: '该商品已售出',
+  OFF_SALE: '该商品已下架',
+  DELETED: '该商品已删除'
+}[detail.value?.status] || '当前不可下单'))
+const wantLabel = computed(() => (detail.value?.status === 'SOLD' ? '已售出' : '想要'))
 const isOwner = computed(() =>
   detail.value && userStore.userInfo?.userId && detail.value.seller?.id === userStore.userInfo.userId
 )
@@ -142,6 +154,42 @@ async function load() {
     detail.value = null
   } finally {
     loading.value = false
+  }
+}
+
+/** 想要 = 下单（PRD ORD-01）：生成待确认订单并锁定商品，去订单详情约面交 */
+async function handleWant() {
+  if (!userStore.isLoggedIn) {
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
+    return
+  }
+  try {
+    const res = await createOrder(detail.value.id)
+    ElMessage.success('下单成功！请在聊天中与卖家约好面交时间地点')
+    router.push(`/orders/${res.data.id}`)
+  } catch (err) {
+    const msg = err?.message || ''
+    if (msg.includes('认证')) router.push('/verify')
+  }
+}
+
+/** 聊一聊（PRD CHT-03）：发送商品卡片建立会话，进入消息中心继续沟通 */
+async function handleChat() {
+  if (!userStore.isLoggedIn) {
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
+    return
+  }
+  if (!detail.value.seller?.id) return
+  try {
+    await sendChatMessage({
+      peerUserId: detail.value.seller.id,
+      msgType: 'GOODS_CARD',
+      content: String(detail.value.id)
+    })
+    ElMessage.success('已发送商品卡片')
+    router.push('/message')
+  } catch {
+    /* 敏感词/限频等错误由 request.js 统一提示 */
   }
 }
 

@@ -12,6 +12,20 @@
         <div class="actions">
           <el-button type="primary" @click="router.push('/publish')">发布</el-button>
           <template v-if="userStore.isLoggedIn">
+            <el-tooltip content="通知" placement="bottom">
+              <el-badge :value="msgStore.unreadNotify" :hidden="!msgStore.unreadNotify" :max="99" class="icon-badge">
+                <el-button text @click="router.push('/message?tab=notify')">
+                  <el-icon :size="18"><Bell /></el-icon>
+                </el-button>
+              </el-badge>
+            </el-tooltip>
+            <el-tooltip content="消息" placement="bottom">
+              <el-badge :value="msgStore.unreadChat" :hidden="!msgStore.unreadChat" :max="99" class="icon-badge">
+                <el-button text @click="router.push('/message')">
+                  <el-icon :size="18"><ChatDotRound /></el-icon>
+                </el-button>
+              </el-badge>
+            </el-tooltip>
             <el-dropdown @command="handleCommand">
               <span class="user-entry">
                 <el-icon><User /></el-icon>
@@ -43,20 +57,28 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { useMsgStore } from '@/stores/msg'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const msgStore = useMsgStore()
 
-// 刷新页面后恢复登录态用户资料（昵称/认证状态/信用，PRD USR-04）
+// 刷新页面后恢复登录态用户资料；登录期间轮询消息/通知双红点（PRD CHT-05/NTF-02）
 onMounted(() => {
   if (userStore.isLoggedIn) {
     userStore.fetchProfile().catch(() => {})
+    msgStore.startPolling()
   }
 })
+watch(() => userStore.isLoggedIn, (loggedIn) => {
+  if (loggedIn) msgStore.startPolling()
+  else msgStore.stopPolling()
+})
+onUnmounted(() => msgStore.stopPolling())
 
 // 详情类路由（/goods/1、/want/2…）高亮对应一级导航
 const activeMenu = computed(() => `/${route.path.split('/')[1]}`)

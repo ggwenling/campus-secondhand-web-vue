@@ -14,7 +14,9 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': { target: 'http://localhost:8080', changeOrigin: true },
-      '/upload': { target: 'http://localhost:8080', changeOrigin: true }
+      '/upload': { target: 'http://localhost:8080', changeOrigin: true },
+      // WebSocket 私信（PRD CHT-02）：开发期由 Vite 代理转发，生产同源部署无需此配置
+      '/ws': { target: 'http://localhost:8080', ws: true, changeOrigin: true }
     }
   }
 })

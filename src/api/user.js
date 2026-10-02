@@ -8,6 +8,7 @@ export const refreshToken = (data) => request.post('/auth/refresh', data)
 
 export const getMyProfile = () => request.get('/users/me')
 export const getMyOverview = () => request.get('/users/me/overview')
+export const getMyCredits = (params) => request.get('/credits/my', { params })
 export const getUserProfile = (userId) => request.get(`/users/${userId}`)
 export const updateProfile = (data) => request.put('/users/me', data)
 

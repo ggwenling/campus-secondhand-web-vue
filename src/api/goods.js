@@ -2,6 +2,7 @@ import request from './request'
 
 // 商品模块接口（PRD GDS-01~08）。上传走同一封装便于统一鉴权与错误处理
 export const pageGoods = (params) => request.get('/goods', { params })
+export const pageMyGoods = (params) => request.get('/goods/my', { params })
 export const getGoods = (id) => request.get(`/goods/${id}`)
 export const publishGoods = (data) => request.post('/goods', data)
 export const updateGoods = (id, data) => request.put(`/goods/${id}`, data)
