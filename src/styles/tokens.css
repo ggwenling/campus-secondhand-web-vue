@@ -1,0 +1,40 @@
+/* ============================================================
+ * Design Tokens（前端设计文档 §3）：全站颜色/圆角/阴影唯一来源
+ * 换肤 = 只改本文件。业务代码一律 var(--color-*) / var(--radius-*)，
+ * 禁止在页面里私写颜色值（前端设计文档 §8-4）。
+ * ============================================================ */
+:root {
+  /* 主色：清新校园绿 */
+  --color-primary: #00B578;
+  --color-primary-hover: #33C48F;
+  --color-primary-dark: #009662;
+  --color-primary-bg: #E8F8F1;
+  /* 价格专用强调色（不泛用） */
+  --color-accent: #FF6B35;
+  /* 中性 */
+  --color-page-bg: #F7F8FA;
+  --color-card-bg: #FFFFFF;
+  --color-border: #EBEEF5;
+
+  /* 圆角：全站仅 12 / 8 / 50% 三种（§8-5） */
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --radius-image: 8px;
+
+  /* 阴影 */
+  --shadow-card: 0 2px 12px rgba(31, 45, 61, 0.06);
+  --shadow-card-hover: 0 8px 24px rgba(0, 181, 120, 0.16);
+
+  /* ---- Element Plus 主题覆盖（主色换肤同步生效） ---- */
+  --el-color-primary: #00B578;
+  --el-color-primary-light-3: #33C48F;
+  --el-color-primary-light-5: #7FD8B4;
+  --el-color-primary-light-7: #B3E8D2;
+  --el-color-primary-light-8: #CCF0E1;
+  --el-color-primary-light-9: #E8F8F1;
+  --el-color-primary-dark-2: #009662;
+}
+
+body {
+  background: var(--color-page-bg);
+}

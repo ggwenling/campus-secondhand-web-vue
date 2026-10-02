@@ -21,7 +21,7 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -38,8 +38,16 @@ async function handleLogin() {
   }
   loading.value = true
   try {
-    await userStore.login(form)
-    ElMessage.success('登录成功')
+    const data = await userStore.login(form)
+    if (data.banned) {
+      // 封禁用户可登录但功能全被拦截（PRD §4.1），登录即展示封禁通知
+      ElMessageBox.alert(data.banReason || '账号已被封禁', '封禁通知', {
+        confirmButtonText: '我知道了',
+        type: 'error'
+      })
+    } else {
+      ElMessage.success('登录成功')
+    }
     router.push(route.query.redirect || '/')
   } finally {
     loading.value = false
@@ -54,7 +62,8 @@ async function handleLogin() {
   padding-top: 60px;
 }
 .login-card {
-  width: 400px;
+  width: 480px;
+  border-radius: var(--radius-card);
 }
 .login-title {
   text-align: center;

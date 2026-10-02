@@ -43,13 +43,20 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+
+// 刷新页面后恢复登录态用户资料（昵称/认证状态/信用，PRD USR-04）
+onMounted(() => {
+  if (userStore.isLoggedIn) {
+    userStore.fetchProfile().catch(() => {})
+  }
+})
 
 // 详情类路由（/goods/1、/want/2…）高亮对应一级导航
 const activeMenu = computed(() => `/${route.path.split('/')[1]}`)
@@ -84,7 +91,7 @@ async function handleCommand(command) {
 .logo {
   font-size: 20px;
   font-weight: 700;
-  color: #409eff;
+  color: var(--color-primary);
   white-space: nowrap;
 }
 .nav {
