@@ -59,7 +59,21 @@
             </el-button>
           </div>
 
+          <!-- 举报商品入口（非本人） -->
+          <div v-if="!isOwner" class="report-row">
+            <el-button link type="info" size="small" @click="openReport('GOODS')">
+              <el-icon><Warning /></el-icon>&nbsp;举报商品
+            </el-button>
+          </div>
+
           <UserCard v-if="detail.seller" :user="detail.seller" class="seller-card" />
+
+          <!-- 举报该用户入口（非本人） -->
+          <div v-if="!isOwner && detail.seller" class="report-row">
+            <el-button link type="info" size="small" @click="openReport('USER')">
+              <el-icon><Warning /></el-icon>&nbsp;举报该用户
+            </el-button>
+          </div>
 
           <!-- 卖家本人操作（GDS-02）：OFF_SALE→重新上架（on-sale）；DELETED（仅本人可见）→恢复（restore） -->
           <div v-if="isOwner" class="owner-row">
@@ -95,6 +109,13 @@
       action-text="回首页看看"
       @action="router.push('/')"
     />
+
+    <ReportDialog
+      v-model:visible="reportVisible"
+      :target-type="reportTarget.type"
+      :target-id="reportTarget.id"
+      :target-title="reportTarget.title"
+    />
   </div>
 </template>
 
@@ -111,6 +132,7 @@ import PriceText from '@/components/PriceText.vue'
 import UserCard from '@/components/UserCard.vue'
 import GoodsCard from '@/components/GoodsCard.vue'
 import EmptyBlock from '@/components/EmptyBlock.vue'
+import ReportDialog from '@/components/ReportDialog.vue'
 
 const CONDITION = { 1: '全新', 2: '几乎全新', 3: '轻微使用', 4: '明显使用' }
 
@@ -135,6 +157,25 @@ const wantLabel = computed(() => (detail.value?.status === 'SOLD' ? '已售出' 
 const isOwner = computed(() =>
   detail.value && userStore.userInfo?.userId && detail.value.seller?.id === userStore.userInfo.userId
 )
+
+// ---- 举报（RPT-01）：商品举报 / 卖家用户举报，本人不显示入口 ----
+const reportVisible = ref(false)
+const reportTargetType = ref('GOODS')
+const reportTarget = computed(() =>
+  reportTargetType.value === 'USER'
+    ? { type: 'USER', id: detail.value?.seller?.id ?? null, title: detail.value?.seller?.nickname || '' }
+    : { type: 'GOODS', id: detail.value?.id ?? null, title: detail.value?.title || '' }
+)
+
+function openReport(type) {
+  if (!userStore.isLoggedIn) {
+    ElMessage.warning('请先登录')
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
+    return
+  }
+  reportTargetType.value = type
+  reportVisible.value = true
+}
 
 watch(() => route.params.id, load, { immediate: true })
 
@@ -317,6 +358,11 @@ async function doDelete() {
   margin-top: 4px;
 }
 .owner-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.report-row {
   display: flex;
   align-items: center;
   gap: 10px;

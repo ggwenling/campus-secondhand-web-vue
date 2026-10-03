@@ -30,7 +30,18 @@
       </el-card>
 
       <div class="two-col">
-        <UserCard :user="post.publisher" />
+        <div class="left-col">
+          <UserCard :user="post.publisher" />
+          <!-- 举报入口（非帖主本人） -->
+          <div v-if="!isOwner" class="report-row">
+            <el-button link type="info" size="small" @click="openReport('SWAP')">
+              <el-icon><Warning /></el-icon>&nbsp;举报该交换帖
+            </el-button>
+            <el-button link type="info" size="small" @click="openReport('USER')">
+              <el-icon><Warning /></el-icon>&nbsp;举报该用户
+            </el-button>
+          </div>
+        </div>
 
         <el-card shadow="never" class="action-card">
           <template #header><b>我的操作</b></template>
@@ -171,6 +182,13 @@
     </template>
 
     <EmptyBlock v-else description="交换帖不存在或已删除" action-text="返回广场" @action="router.push('/swap')" />
+
+    <ReportDialog
+      v-model:visible="reportVisible"
+      :target-type="reportTarget.type"
+      :target-id="reportTarget.id"
+      :target-title="reportTarget.title"
+    />
   </div>
 </template>
 
@@ -185,6 +203,7 @@ import { pageMyGoods } from '@/api/goods'
 import { useUserStore } from '@/stores/user'
 import UserCard from '@/components/UserCard.vue'
 import EmptyBlock from '@/components/EmptyBlock.vue'
+import ReportDialog from '@/components/ReportDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -214,6 +233,25 @@ const isOwner = computed(
   () => !!userStore.userInfo?.userId && post.value?.publisher?.id === userStore.userInfo.userId
 )
 const canManage = computed(() => isOwner.value && post.value?.status === 'OPEN')
+
+// ---- 举报（RPT-01）：交换帖举报 / 帖主用户举报，本人不显示入口 ----
+const reportVisible = ref(false)
+const reportTargetType = ref('SWAP')
+const reportTarget = computed(() =>
+  reportTargetType.value === 'USER'
+    ? { type: 'USER', id: post.value?.publisher?.id ?? null, title: post.value?.publisher?.nickname || '' }
+    : { type: 'SWAP', id: post.value?.id ?? null, title: post.value?.title || '' }
+)
+
+function openReport(type) {
+  if (!userStore.isLoggedIn) {
+    ElMessage.warning('请先登录')
+    goLogin()
+    return
+  }
+  reportTargetType.value = type
+  reportVisible.value = true
+}
 
 const requestHint = computed(() => {
   if (!userStore.isLoggedIn) return '登录并完成校园认证后即可发起交换'
@@ -390,6 +428,17 @@ async function doRemove() {
   grid-template-columns: 1fr 1fr;
   gap: 16px;
   margin-bottom: 16px;
+}
+.left-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.report-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-left: 4px;
 }
 .action-row {
   display: flex;

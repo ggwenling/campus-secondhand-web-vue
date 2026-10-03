@@ -50,6 +50,10 @@
       </div>
     </el-header>
     <el-main class="main">
+      <!-- 受限 / 封禁全局提示（PRD §4.1 / §5.7）：导航栏下方、页面内容之上 -->
+      <div v-if="notice" class="global-notice">
+        <el-alert :title="notice.text" :type="notice.type" :closable="false" show-icon />
+      </div>
       <router-view />
     </el-main>
     <el-footer class="footer">校园二手交易系统 · 线下面交 · 平台不经手资金</el-footer>
@@ -67,16 +71,52 @@ const router = useRouter()
 const userStore = useUserStore()
 const msgStore = useMsgStore()
 
+// ---- 受限 / 封禁全局提示（先声明，供下方轮询与模板使用）----
+// 数据来源：userStore.userInfo（banned/banReason/bannedUntil 由登录响应与 /users/me 的 status 映射而来）
+const isBanned = computed(() => userStore.userInfo?.banned === true)
+const banText = computed(() => {
+  const base = '账号已被封禁，暂不能发布、互动、下单与发送消息'
+  const reason = userStore.userInfo?.banReason
+  const until = userStore.userInfo?.bannedUntil
+  const extra = []
+  if (reason) extra.push(`原因：${reason}`)
+  if (until) extra.push(`解封时间：${until}`)
+  return extra.length ? `${base}（${extra.join('；')}）` : base
+})
+const notice = computed(() => {
+  if (!userStore.isLoggedIn) return null
+  if (isBanned.value) return { type: 'error', text: banText.value }
+  const score = userStore.userInfo?.creditScore
+  if (typeof score === 'number' && score < 60) {
+    return {
+      type: 'warning',
+      text: '信用分低于 60，暂不能发布 / 下单 / 应约 / 发起交换；完成交易与获得好评可恢复'
+    }
+  }
+  return null
+})
+
 // 刷新页面后恢复登录态用户资料；登录期间轮询消息/通知双红点（PRD CHT-05/NTF-02）
-onMounted(() => {
-  if (userStore.isLoggedIn) {
-    userStore.fetchProfile().catch(() => {})
-    msgStore.startPolling()
+// 封禁账号不启动轮询：其业务接口一律 40301，轮询只会反复弹出错误提示
+onMounted(async () => {
+  if (!userStore.isLoggedIn) return
+  await userStore.fetchProfile().catch(() => {})
+  if (!isBanned.value) msgStore.startPolling()
+})
+watch(() => userStore.isLoggedIn, async (loggedIn) => {
+  if (loggedIn) {
+    // 登录后补拉完整资料以获取 creditScore 与封禁态（登录响应已带 banned，此处兜底刷新）
+    if (userStore.userInfo?.creditScore === undefined) {
+      await userStore.fetchProfile().catch(() => {})
+    }
+    if (!isBanned.value) msgStore.startPolling()
+  } else {
+    msgStore.stopPolling()
   }
 })
-watch(() => userStore.isLoggedIn, (loggedIn) => {
-  if (loggedIn) msgStore.startPolling()
-  else msgStore.stopPolling()
+watch(isBanned, (banned) => {
+  if (banned) msgStore.stopPolling()
+  else if (userStore.isLoggedIn) msgStore.startPolling()
 })
 onUnmounted(() => msgStore.stopPolling())
 
@@ -138,6 +178,11 @@ async function handleCommand(command) {
   width: 100%;
   margin: 0 auto;
   padding: 0;
+}
+.global-notice {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 12px 16px 0;
 }
 .footer {
   text-align: center;

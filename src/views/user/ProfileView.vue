@@ -145,9 +145,62 @@
             </template>
           </div>
 
-          <!-- 我的举报 -->
+          <!-- 我的举报（RPT-02） -->
           <div v-show="activeTab === 'reports'" class="tab-body">
-            <EmptyBlock description="举报进度随 M7 上线后在此展示（RPT-02）" :image-size="100" />
+            <el-radio-group v-model="reportStatus" class="report-filter" @change="loadReports(1)">
+              <el-radio-button :value="''">全部</el-radio-button>
+              <el-radio-button :value="0">待处理</el-radio-button>
+              <el-radio-button :value="1">已处置</el-radio-button>
+              <el-radio-button :value="2">已驳回</el-radio-button>
+            </el-radio-group>
+
+            <div v-if="reportLoading"><el-skeleton :rows="5" animated /></div>
+            <template v-else>
+              <el-table v-if="reportList.length" :data="reportList" style="width: 100%">
+                <el-table-column label="举报对象" min-width="220">
+                  <template #default="{ row }">
+                    <el-tag size="small" type="info" effect="plain">{{ reportTargetText(row.targetType) }}</el-tag>
+                    <span class="report-title">{{ row.targetTitle || '目标已删除' }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="举报类型" width="110">
+                  <template #default="{ row }">{{ reportTypeText(row.reportType) }}</template>
+                </el-table-column>
+                <el-table-column label="状态" width="100">
+                  <template #default="{ row }">
+                    <el-tag size="small" :type="reportStatusTag(row.status)" effect="light">
+                      {{ row.statusText || reportStatusText(row.status) }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="提交时间" width="160">
+                  <template #default="{ row }">{{ row.createdAt || '—' }}</template>
+                </el-table-column>
+                <el-table-column label="处置结果" min-width="200">
+                  <template #default="{ row }">
+                    <template v-if="row.status === 1 || row.status === 2">
+                      <div>{{ row.result || '—' }}</div>
+                      <div class="report-handled">处置于 {{ row.handledAt || '—' }}</div>
+                    </template>
+                    <span v-else class="muted">—</span>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div v-if="reportList.length" class="pager-row">
+                <el-pagination
+                  layout="total, prev, pager, next"
+                  :page-size="20"
+                  :total="reportTotal"
+                  :current-page="reportPage"
+                  @current-change="loadReports"
+                />
+              </div>
+              <EmptyBlock
+                v-else
+                description="还没有举报记录，遇到违规内容可在商品 / 求购 / 交换详情页发起举报"
+                :image-size="100"
+              />
+            </template>
           </div>
         </el-tabs>
       </el-card>
@@ -199,6 +252,7 @@ import { useUserStore } from '@/stores/user'
 import { updateProfile, getMyCredits } from '@/api/user'
 import { pageMyGoods, pageMyFavorites } from '@/api/goods'
 import { pageOrders, pageReviews } from '@/api/order'
+import { pageMyReports } from '@/api/report'
 import { getToken } from '@/utils/auth'
 import GoodsCard from '@/components/GoodsCard.vue'
 import PriceText from '@/components/PriceText.vue'
@@ -243,12 +297,20 @@ const creditList = ref([])
 const creditTotal = ref(0)
 const creditPage = ref(1)
 
+// 我的举报（RPT-02）：状态筛选（'' 全部 / 0 待处理 / 1 已处置 / 2 已驳回）
+const reportList = ref([])
+const reportTotal = ref(0)
+const reportPage = ref(1)
+const reportStatus = ref('')
+const reportLoading = ref(false)
+
 watch(activeTab, (tab) => {
   if (tab === 'goods') loadGoods()
   else if (tab === 'favorites') loadFavorites()
   else if (tab === 'bought' || tab === 'sold') loadOrders(tab, 1)
   else if (tab === 'reviews') loadReviews()
   else if (tab === 'credits') loadCredits(1)
+  else if (tab === 'reports') loadReports(1)
 }, { immediate: true })
 
 async function loadGoods() {
@@ -303,6 +365,20 @@ async function loadCredits(page) {
   } finally { tabLoading.credits = false }
 }
 
+async function loadReports(page = 1) {
+  reportLoading.value = true
+  try {
+    const res = await pageMyReports({
+      status: reportStatus.value === '' ? undefined : reportStatus.value,
+      pageNum: page,
+      pageSize: 20
+    })
+    reportList.value = res.data.list || []
+    reportTotal.value = res.data.total || 0
+    reportPage.value = page
+  } finally { reportLoading.value = false }
+}
+
 // ---- 展示映射 ----
 const ORDER_TEXT = { WAIT_CONFIRM: '待确认', SCHEDULED: '待面交', COMPLETED: '已完成', CANCELLED: '已取消' }
 const ORDER_TAG = { WAIT_CONFIRM: 'warning', SCHEDULED: 'primary', COMPLETED: 'success', CANCELLED: 'info' }
@@ -317,6 +393,16 @@ function orderText(s) { return ORDER_TEXT[s] || s }
 function orderTagType(s) { return ORDER_TAG[s] || 'info' }
 function creditReason(r) { return CREDIT_REASON[r] || r }
 function shortTime(t) { return t ? String(t).slice(5, 16) : '' }
+
+// ---- 举报展示映射（RPT-02） ----
+const REPORT_STATUS_TEXT = { 0: '待处理', 1: '已处置', 2: '已驳回' }
+const REPORT_STATUS_TAG = { 0: 'warning', 1: 'success', 2: 'info' }
+const REPORT_TYPE_TEXT = { VIOLATION: '违规内容', FRAUD: '诈骗欺诈', COUNTERFEIT: '假冒伪劣', OTHER: '其他' }
+const REPORT_TARGET_TEXT = { GOODS: '商品', WANT: '求购', SWAP: '交换', USER: '用户' }
+function reportStatusText(s) { return REPORT_STATUS_TEXT[s] ?? s }
+function reportStatusTag(s) { return REPORT_STATUS_TAG[s] || 'info' }
+function reportTypeText(t) { return REPORT_TYPE_TEXT[t] || t || '—' }
+function reportTargetText(t) { return REPORT_TARGET_TEXT[t] || t || '—' }
 
 // ---- 编辑资料 ----
 const editVisible = ref(false)
@@ -474,6 +560,17 @@ async function saveProfile() {
   display: flex;
   justify-content: center;
   margin-top: 16px;
+}
+.report-filter {
+  margin-bottom: 16px;
+}
+.report-title {
+  margin-left: 8px;
+}
+.report-handled {
+  color: #909399;
+  font-size: 12px;
+  margin-top: 2px;
 }
 .review-list,
 .credit-list {

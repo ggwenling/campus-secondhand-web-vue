@@ -24,7 +24,10 @@ export const useUserStore = defineStore('user', () => {
       nickname: data.nickname,
       avatar: data.avatar,
       authStatus: data.authStatus,
-      banned: data.banned === true
+      // LoginVO 携带封禁状态/原因/期限（PRD §4.1 封禁用户仍可登录查看封禁通知）
+      banned: data.banned === true,
+      banReason: data.banReason || '',
+      bannedUntil: data.bannedUntil || ''
     }
     return data
   }
@@ -43,7 +46,14 @@ export const useUserStore = defineStore('user', () => {
   async function fetchProfile() {
     if (!isLoggedIn.value) return null
     const res = await getMyProfile()
-    userInfo.value = { ...userInfo.value, ...res.data, banned: false }
+    // /users/me 返回 status(0正常/1封禁) + banReason/bannedUntil：刷新后据此恢复封禁态
+    userInfo.value = {
+      ...userInfo.value,
+      ...res.data,
+      banned: res.data?.status === 1,
+      banReason: res.data?.banReason || '',
+      bannedUntil: res.data?.bannedUntil || ''
+    }
     return userInfo.value
   }
 
