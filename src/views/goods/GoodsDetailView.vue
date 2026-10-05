@@ -123,8 +123,9 @@
 // 商品详情（PRD GDS-05/06/08）：图集 + 信息 + 收藏 + 卖家卡 + 相似推荐；浏览埋点由后端完成
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { getGoods, pageGoods, addFavorite, removeFavorite, offSaleGoods, onSaleGoods, restoreGoods, deleteGoods } from '@/api/goods'
+import { confirmAction } from '@/utils/confirm'
 import { createOrder } from '@/api/order'
 import { sendChatMessage } from '@/api/message'
 import { useUserStore } from '@/stores/user'
@@ -179,24 +180,33 @@ function openReport(type) {
 
 watch(() => route.params.id, load, { immediate: true })
 
+// 请求序号守卫（验收 P3）：快速切换商品时丢弃过期响应，防旧数据覆盖新数据
+let loadSeq = 0
+
 async function load() {
   const id = route.params.id
   if (!id) return
+  const seq = ++loadSeq
   loading.value = true
   try {
     const res = await getGoods(id)
+    if (seq !== loadSeq) return
     detail.value = res.data
     // 相似推荐（REC-03）：后端按"同分类 + 共享标签"离线计算并缓存，随详情一并返回；
     // 若推荐结果为空（如无标签且同类商品少），回退为同分类热门商品
     similar.value = (detail.value?.similarGoods || []).filter((g) => g.id !== detail.value.id).slice(0, 6)
     if (!similar.value.length && detail.value?.categoryId) {
       const sim = await pageGoods({ categoryId: detail.value.categoryId, pageNum: 1, pageSize: 7, sort: 'hot' })
+      if (seq !== loadSeq) return
       similar.value = (sim.data.list || []).filter((g) => g.id !== detail.value.id).slice(0, 6)
     }
   } catch {
+    if (seq !== loadSeq) return
     detail.value = null
   } finally {
-    loading.value = false
+    if (seq === loadSeq) {
+      loading.value = false
+    }
   }
 }
 
@@ -255,7 +265,7 @@ async function toggleFavorite() {
 }
 
 async function doOffSale() {
-  await ElMessageBox.confirm('下架后商品将不在列表展示，可随时重新上架', '下架商品', { type: 'warning' })
+  if (!(await confirmAction('下架后商品将不在列表展示，可随时重新上架', '下架商品', { type: 'warning' }))) return
   await offSaleGoods(detail.value.id)
   ElMessage.success('已下架')
   load()
@@ -274,10 +284,11 @@ async function doRestore() {
 }
 
 async function doDelete() {
-  await ElMessageBox.confirm('删除后商品不再公开展示，30 天内可自行恢复', '删除商品', {
+  const ok = await confirmAction('删除后商品不再公开展示，30 天内可自行恢复', '删除商品', {
     type: 'warning',
     confirmButtonText: '删除'
   })
+  if (!ok) return
   await deleteGoods(detail.value.id)
   ElMessage.success('已删除')
   router.push('/')

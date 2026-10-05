@@ -177,9 +177,10 @@
 <script setup>
 // 求购详情（PRD REQ-02/03/04 / 前端设计文档 §6.1）：
 // 描述卡 + 发布者卡 + 应约弹窗；帖主额外可见应约列表（接受生成订单 / 拒绝）与编辑关闭删除
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirmAction, promptAction } from '@/utils/confirm'
 import {
   getWantPost, createOffer, acceptOffer, rejectOffer, withdrawOffer, closeWantPost, removeWantPost
 } from '@/api/want'
@@ -242,7 +243,8 @@ const offerHint = computed(() => {
   return '当前账号信用分受限，暂不能应约'
 })
 
-onMounted(load)
+// 路由参数变化时重载（验收 P3：前进/后退复用组件时 onMounted 不会再次触发）
+watch(() => route.params.id, load, { immediate: true })
 
 async function load() {
   loading.value = true
@@ -274,53 +276,58 @@ async function doOffer() {
 }
 
 async function doWithdraw() {
-  await ElMessageBox.confirm('确定撤回这条应约吗？撤回后可再次提交。', '撤回应约', {
+  const ok = await confirmAction('确定撤回这条应约吗？撤回后可再次提交。', '撤回应约', {
     type: 'warning',
     confirmButtonText: '撤回'
   })
+  if (!ok) return
   await withdrawOffer(myOffer.value.id)
   ElMessage.success('已撤回')
   await load()
 }
 
 async function doAccept(row) {
-  await ElMessageBox.confirm(
+  const ok = await confirmAction(
     `接受「${row.nickname}」的报价 ¥${Number(row.price).toFixed(2)}？接受后将生成订单，其余应约自动关闭。`,
     '接受应约',
     { type: 'warning', confirmButtonText: '接受并生成订单' }
   )
+  if (!ok) return
   await acceptOffer(row.id)
   ElMessage.success('已接受，订单已生成，请到订单详情查看')
   await load()
 }
 
 async function doReject(row) {
-  const { value } = await ElMessageBox.prompt('可填写拒绝理由（选填）', '拒绝应约', {
+  const reason = await promptAction('可填写拒绝理由（选填）', '拒绝应约', {
     inputPlaceholder: '如：价格不合适 / 已找到更合适的',
     confirmButtonText: '拒绝',
     inputValue: ''
   })
-  await rejectOffer(row.id, value || undefined)
+  if (reason === null) return
+  await rejectOffer(row.id, reason || undefined)
   ElMessage.success('已拒绝该应约')
   await load()
 }
 
 async function doClose() {
-  const { value } = await ElMessageBox.prompt('关闭后该帖不再接收应约，已有待处理应约将失效', '关闭求购帖', {
+  const reason = await promptAction('关闭后该帖不再接收应约，已有待处理应约将失效', '关闭求购帖', {
     inputPlaceholder: '关闭理由（选填）',
     confirmButtonText: '关闭',
     inputValue: ''
   })
-  await closeWantPost(post.value.id, value || undefined)
+  if (reason === null) return
+  await closeWantPost(post.value.id, reason || undefined)
   ElMessage.success('已关闭')
   await load()
 }
 
 async function doRemove() {
-  await ElMessageBox.confirm('删除后帖子不再公开展示，30 天内可以恢复。确定删除？', '删除求购帖', {
+  const ok = await confirmAction('删除后帖子不再公开展示，30 天内可以恢复。确定删除？', '删除求购帖', {
     type: 'warning',
     confirmButtonText: '删除'
   })
+  if (!ok) return
   await removeWantPost(post.value.id)
   ElMessage.success('已删除')
   router.push('/want')

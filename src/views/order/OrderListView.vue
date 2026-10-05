@@ -84,8 +84,9 @@
 // 订单行卡（缩略/对方/金额/状态 tag/操作按钮随状态与角色显隐）
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { pageOrders, confirmOrder, rejectOrder, cancelOrder, completeOrder } from '@/api/order'
+import { confirmAction, promptAction } from '@/utils/confirm'
 import PriceText from '@/components/PriceText.vue'
 import EmptyBlock from '@/components/EmptyBlock.vue'
 
@@ -130,28 +131,30 @@ function goDetail(order) {
 }
 
 async function onConfirm(order) {
-  await ElMessageBox.confirm('确认出售该商品？确认后请与买家约定面交时间。', '确认出售', { type: 'warning' })
+  if (!(await confirmAction('确认出售该商品？确认后请与买家约定面交时间。', '确认出售', { type: 'warning' }))) return
   await confirmOrder(order.id)
   ElMessage.success('已确认，订单进入待面交')
   load()
 }
 
 async function onReject(order) {
-  const { value } = await ElMessageBox.prompt('拒绝后订单将取消，商品重新上架。可填写拒绝理由：', '拒绝订单', {
+  const reason = await promptAction('拒绝后订单将取消，商品重新上架。可填写拒绝理由：', '拒绝订单', {
     inputPlaceholder: '理由（可选，200 字内）',
     confirmButtonClass: 'el-button--danger'
   })
-  await rejectOrder(order.id, value || '')
+  if (reason === null) return
+  await rejectOrder(order.id, reason || '')
   ElMessage.success('已拒绝，商品已重新上架')
   load()
 }
 
 async function onCancel(order) {
-  await ElMessageBox.confirm('取消后订单不可恢复，商品将重新上架。', '取消订单', {
+  const ok = await confirmAction('取消后订单不可恢复，商品将重新上架。', '取消订单', {
     type: 'warning',
     confirmButtonText: '确定取消',
     cancelButtonText: '再想想'
   })
+  if (!ok) return
   await cancelOrder(order.id, '')
   ElMessage.success('订单已取消')
   load()
@@ -161,7 +164,7 @@ async function onComplete(order) {
   const tip = order.type === 'SWAP'
     ? '请务必当面确认收到物品后再点击确认。'
     : '请务必当面验收并收到款项后再点击确认。'
-  await ElMessageBox.confirm(tip, '确认完成交易', { type: 'warning' })
+  if (!(await confirmAction(tip, '确认完成交易', { type: 'warning' }))) return
   await completeOrder(order.id)
   ElMessage.success('操作成功')
   load()

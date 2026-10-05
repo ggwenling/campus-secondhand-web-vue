@@ -4,10 +4,8 @@ import request from './request'
 export const login = (data) => request.post('/auth/login', data)
 export const register = (data) => request.post('/auth/register', data)
 export const logout = () => request.post('/auth/logout')
-export const refreshToken = (data) => request.post('/auth/refresh', data)
 
 export const getMyProfile = () => request.get('/users/me')
-export const getMyOverview = () => request.get('/users/me/overview')
 export const getMyCredits = (params) => request.get('/credits/my', { params })
 export const getUserProfile = (userId) => request.get(`/users/${userId}`)
 export const updateProfile = (data) => request.put('/users/me', data)

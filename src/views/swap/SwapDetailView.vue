@@ -195,9 +195,10 @@
 <script setup>
 // 交换详情（PRD SWP-02/03 / 前端设计文档 §6.1）：双方物品对照 + 发起交换弹窗（可关联在售商品）
 // + 帖主视角请求列表（同意生成 SWAP 订单 / 拒绝）
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirmAction, promptAction } from '@/utils/confirm'
 import { getSwapPost, createSwapRequest, acceptSwapRequest, rejectSwapRequest, closeSwapPost, removeSwapPost } from '@/api/swap'
 import { pageMyGoods } from '@/api/goods'
 import { useUserStore } from '@/stores/user'
@@ -261,7 +262,8 @@ const requestHint = computed(() => {
   return '当前账号信用分受限，暂不能发起交换'
 })
 
-onMounted(load)
+// 路由参数变化时重载（验收 P3：前进/后退复用组件时 onMounted 不会再次触发）
+watch(() => route.params.id, load, { immediate: true })
 
 async function load() {
   loading.value = true
@@ -311,43 +313,47 @@ async function doRequest() {
 }
 
 async function doAccept(row) {
-  await ElMessageBox.confirm(
+  const ok = await confirmAction(
     `同意「${row.nickname}」的交换请求？同意后将生成交换订单，其余请求自动关闭，双方确认完成即交易成功。`,
     '同意交换',
     { type: 'warning', confirmButtonText: '同意并生成订单' }
   )
+  if (!ok) return
   await acceptSwapRequest(row.id)
   ElMessage.success('已同意，交换订单已生成')
   await load()
 }
 
 async function doReject(row) {
-  const { value } = await ElMessageBox.prompt('可填写拒绝理由（选填）', '拒绝交换请求', {
+  const reason = await promptAction('可填写拒绝理由（选填）', '拒绝交换请求', {
     inputPlaceholder: '如：物品不太合适',
     confirmButtonText: '拒绝',
     inputValue: ''
   })
-  await rejectSwapRequest(row.id, value || undefined)
+  if (reason === null) return
+  await rejectSwapRequest(row.id, reason || undefined)
   ElMessage.success('已拒绝该请求')
   await load()
 }
 
 async function doClose() {
-  const { value } = await ElMessageBox.prompt('关闭后该帖不再接收交换请求，已有待处理请求将失效', '关闭交换帖', {
+  const reason = await promptAction('关闭后该帖不再接收交换请求，已有待处理请求将失效', '关闭交换帖', {
     inputPlaceholder: '关闭理由（选填）',
     confirmButtonText: '关闭',
     inputValue: ''
   })
-  await closeSwapPost(post.value.id, value || undefined)
+  if (reason === null) return
+  await closeSwapPost(post.value.id, reason || undefined)
   ElMessage.success('已关闭')
   await load()
 }
 
 async function doRemove() {
-  await ElMessageBox.confirm('删除后帖子不再公开展示，30 天内可以恢复。确定删除？', '删除交换帖', {
+  const ok = await confirmAction('删除后帖子不再公开展示，30 天内可以恢复。确定删除？', '删除交换帖', {
     type: 'warning',
     confirmButtonText: '删除'
   })
+  if (!ok) return
   await removeSwapPost(post.value.id)
   ElMessage.success('已删除')
   router.push('/swap')

@@ -168,9 +168,10 @@
 // SWAP 双确认分别展示双方确认状态与时间）+ 取消原因 + 评价区 + 商品卡跳详情
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { getOrder, confirmOrder, rejectOrder, cancelOrder, completeOrder, reviewOrder } from '@/api/order'
+import { confirmAction, promptAction } from '@/utils/confirm'
 import PriceText from '@/components/PriceText.vue'
 
 const STATUS_META = {
@@ -243,28 +244,30 @@ async function submitReview() {
 }
 
 async function onConfirm() {
-  await ElMessageBox.confirm('确认出售该商品？确认后请与买家约定面交时间。', '确认出售', { type: 'warning' })
+  if (!(await confirmAction('确认出售该商品？确认后请与买家约定面交时间。', '确认出售', { type: 'warning' }))) return
   await confirmOrder(order.value.id)
   ElMessage.success('已确认，订单进入待面交')
   load()
 }
 
 async function onReject() {
-  const { value } = await ElMessageBox.prompt('拒绝后订单将取消，商品重新上架。可填写拒绝理由：', '拒绝订单', {
+  const reason = await promptAction('拒绝后订单将取消，商品重新上架。可填写拒绝理由：', '拒绝订单', {
     inputPlaceholder: '理由（可选，200 字内）',
     confirmButtonClass: 'el-button--danger'
   })
-  await rejectOrder(order.value.id, value || '')
+  if (reason === null) return
+  await rejectOrder(order.value.id, reason || '')
   ElMessage.success('已拒绝')
   load()
 }
 
 async function onCancel() {
-  await ElMessageBox.confirm('取消后订单不可恢复，商品将重新上架。', '取消订单', {
+  const ok = await confirmAction('取消后订单不可恢复，商品将重新上架。', '取消订单', {
     type: 'warning',
     confirmButtonText: '确定取消',
     cancelButtonText: '再想想'
   })
+  if (!ok) return
   await cancelOrder(order.value.id, '')
   ElMessage.success('订单已取消')
   load()
@@ -274,7 +277,7 @@ async function onComplete() {
   const tip = order.value.type === 'SWAP'
     ? '请务必当面确认收到物品后再点击确认。'
     : '请务必当面验收并收到款项后再点击确认。'
-  await ElMessageBox.confirm(tip, '确认完成交易', { type: 'warning' })
+  if (!(await confirmAction(tip, '确认完成交易', { type: 'warning' }))) return
   await completeOrder(order.value.id)
   ElMessage.success('操作成功')
   load()

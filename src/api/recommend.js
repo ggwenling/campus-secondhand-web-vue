@@ -6,5 +6,4 @@ export const recommendHome = (limit = 12) => request.get('/recommend/home', { pa
 /** 热度榜 Top N（首页右侧栏，REC-02 冷启动口径） */
 export const recommendHot = (limit = 10) => request.get('/recommend/hot', { params: { limit } })
 /** 商品详情相似推荐（同分类 + 共享标签，排除自身） */
-export const recommendSimilar = (goodsId, limit = 6) =>
   request.get(`/recommend/similar/${goodsId}`, { params: { limit } })
